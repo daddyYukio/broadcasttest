@@ -29,32 +29,28 @@ public class MJpegServer implements Runnable {
     public void run() {
         ServerSocket socket = null;
 
-        while(isRunning()){
-            try {
-                socket = new ServerSocket();
-                socket.setReuseAddress(true);
-                socket.setSoTimeout(500); // 500msecでタイムアウト
-                socket.bind(new InetSocketAddress(mPort));
-                break;
-            }
-            catch(Exception e){
-                e.printStackTrace();
-                try{
-                    socket.close();
-                }
-                catch (Exception ex){
+        try {
+            //
+            // サーバソケットを作成し、指定したポートにバインド
+            socket = new ServerSocket();
+            socket.setReuseAddress(true);
+            socket.setSoTimeout(500); // 500msecでタイムアウト
+            socket.bind(new InetSocketAddress(mPort));
+        }
+        catch(Exception e){
+            e.printStackTrace();
 
-                }
-                try {
-                    Thread.sleep(500);
-                    e.printStackTrace();
-                }
-                catch (Exception ex){
-                }
+            try{
+                socket.close();
             }
+            catch (Exception ex){
+
+            }
+            return; //バインドエラー
         }
 
-
+        //
+        // クライアントの接続を待つ
         while (isRunning()) {
             Socket clientSock = null;
 
@@ -63,6 +59,7 @@ public class MJpegServer implements Runnable {
                 talkToClient(clientSock);
             }
             catch (SocketTimeoutException e) {
+                // ソケットタイムアウト
             }
             catch (Exception e) {
                 e.printStackTrace();
@@ -105,10 +102,11 @@ public class MJpegServer implements Runnable {
             @Override
             public void run() {
                 try{
+                    //
+                    // リクエストヘッダの解析
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
 
                     String line;
-
                     if ((line = in.readLine()) == null){
                         return;
                     }
@@ -119,6 +117,8 @@ public class MJpegServer implements Runnable {
                         return;
                     }
 
+                    //
+                    // GETコマンド以外はエラーにする
                     if(commands[0].compareToIgnoreCase("GET") == 0) {
                         responseForVideo(socket);
                     }
@@ -152,24 +152,32 @@ public class MJpegServer implements Runnable {
             socket.setTcpNoDelay(true);
             socket.setSoTimeout(3000);
 
+            //
+            // レスポンスヘッダーを返却
             out = new BufferedOutputStream(socket.getOutputStream());
             String header = "HTTP/1.1 200 OK" + CRLF;
             header += "Content-Type: multipart/x-mixed-replace; boundary=--myboundary" + CRLF;
             header += CRLF;
 
             out.write(header.getBytes("US-ASCII"));
-
+            //
+            // multipartの各パートを生成＆返却
             while(isRunning()){
-
+                //
+                // パートヘッダー
                 header = "--myboundary" + CRLF;
                 header += "Content-Length: " + String.valueOf(mFrame.length) + CRLF;
                 header += "Content-type: image/jpeg" + CRLF;
                 header += CRLF;
-
                 out.write(header.getBytes("US-ASCII"));
+                //
+                // JPEG画像
                 out.write(mFrame, 0, mFrame.length);
+                //
+                // パート終了(\r\n)
                 out.write(CRLF.getBytes("US-ASCII"));
-
+                //
+                // 少しお休み
                 Thread.sleep(100);
             }
         }
